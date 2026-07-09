@@ -1,0 +1,16 @@
+.cosmos{--neb-op:.13;--field:rgba(27,36,64,.32);--star:rgba(27,36,64,.72);--halo-op:.14;--atmo-op:.16;--rim:#8FA8D8;--rim-op:.18;--orbit:rgba(27,36,64,.26);--flow:rgba(27,36,64,.5);--spark:rgba(27,36,64,.5);--glow-op:0}
+@media (prefers-color-scheme: dark){.cosmos{--neb-op:.26;--field:rgba(214,228,248,.5);--star:rgba(245,250,255,.95);--halo-op:.6;--atmo-op:.5;--rim:#C8DAFF;--rim-op:.62;--orbit:rgba(206,222,245,.4);--flow:rgba(223,236,255,.85);--spark:rgba(235,245,255,.95);--glow-op:.34}}
+.cosmos[data-theme="dark"]{--neb-op:.26;--field:rgba(214,228,248,.5);--star:rgba(245,250,255,.95);--halo-op:.6;--atmo-op:.5;--rim:#C8DAFF;--rim-op:.62;--orbit:rgba(206,222,245,.4);--flow:rgba(223,236,255,.85);--spark:rgba(235,245,255,.95);--glow-op:.34}
+.cosmos[data-theme="light"]{--neb-op:.13;--field:rgba(27,36,64,.32);--star:rgba(27,36,64,.72);--halo-op:.14;--atmo-op:.16;--rim:#8FA8D8;--rim-op:.18;--orbit:rgba(27,36,64,.26);--flow:rgba(27,36,64,.5);--spark:rgba(27,36,64,.5);--glow-op:0}
+.cosmos .twinkle{animation:c-tw var(--dur,4s) ease-in-out infinite var(--dl,0s)}
+.cosmos .spark{transform-box:fill-box;transform-origin:center;animation:c-spark var(--dur,5s) ease-in-out infinite var(--dl,0s)}
+.cosmos .float{animation:c-float var(--dur,18s) ease-in-out infinite var(--dl,0s)}
+.cosmos .drift{animation:c-drift 70s ease-in-out infinite}
+.cosmos .flow{stroke-dasharray:2 16;stroke-linecap:round;animation:c-flow var(--dur,10s) linear infinite}
+.cosmos .ringflow{stroke-dasharray:3 26;stroke-linecap:round;animation:c-flow var(--dur,16s) linear infinite}
+@keyframes c-tw{0%,100%{opacity:1}50%{opacity:.42}}
+@keyframes c-spark{0%,100%{opacity:.95;transform:scale(1)}50%{opacity:.55;transform:scale(.82)}}
+@keyframes c-float{0%,100%{transform:translate(0,0)}50%{transform:translate(var(--fx,0px),var(--fy,-6px))}}
+@keyframes c-drift{0%,100%{transform:translate(0,0)}50%{transform:translate(14px,-10px)}}
+@keyframes c-flow{to{stroke-dashoffset:-240}}
+@media (prefers-reduced-motion:reduce){.cosmos *{animation:none!important}}
