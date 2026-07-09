@@ -11,14 +11,14 @@ const TOKENS = {
     "--page-bg": "radial-gradient(125% 115% at 64% 22%, #1c2440 0%, #11151f 46%, #080a10 100%)",
     "--panel": "rgba(15,17,25,0.74)", "--panel-2": "rgba(24,27,38,0.60)", "--rail": "rgba(13,15,22,0.40)",
     "--glass": "rgba(16,18,27,0.72)", "--text": "#EEF1F8", "--text-dim": "rgba(238,241,248,0.66)",
-    "--text-faint": "rgba(238,241,248,0.40)", "--line": "rgba(255,255,255,0.10)", "--line-soft": "rgba(255,255,255,0.055)",
+    "--text-faint": "rgba(238,241,248,0.58)", "--line": "rgba(255,255,255,0.10)", "--line-soft": "rgba(255,255,255,0.055)",
     "--accent": "#F4C77B", "--link": "#BBD6F2", "--chip": "rgba(255,255,255,0.07)", "--shadow": "0 18px 50px -24px rgba(0,0,0,0.62)",
   },
   light: {
     "--page-bg": "radial-gradient(125% 115% at 64% 20%, #fdfbf6 0%, #f4eee2 56%, #ebe3d2 100%)",
     "--panel": "rgba(255,253,250,0.88)", "--panel-2": "rgba(255,255,255,0.78)", "--rail": "rgba(255,253,247,0.6)",
     "--glass": "rgba(255,255,255,0.78)", "--text": "#1d2230", "--text-dim": "rgba(29,34,48,0.7)",
-    "--text-faint": "rgba(29,34,48,0.45)", "--line": "rgba(20,24,40,0.12)", "--line-soft": "rgba(20,24,40,0.07)",
+    "--text-faint": "rgba(29,34,48,0.60)", "--line": "rgba(20,24,40,0.12)", "--line-soft": "rgba(20,24,40,0.07)",
     "--accent": "#C8821F", "--link": "#2b46f5", "--chip": "rgba(20,24,40,0.05)", "--shadow": "0 18px 50px -30px rgba(40,50,80,0.30)",
   },
 }
@@ -26,6 +26,8 @@ const TOKENS = {
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]))
 const hueHex = (k) => HUE[k] || "#CBE3F4"
 const root = document.getElementById("root")
+// 로컬(server.mjs)에서만 /api 존재 → 공개 정적 호스트에선 폴링/로그 생략(404 콘솔 노이즈 방지)
+const IS_LOCAL = location.protocol === "file:" || /^(localhost|127\.|0\.0\.0\.0|\[?::1\]?)/.test(location.hostname)
 
 /* ---------- 계층 배지 ---------- */
 const layerTag = (l) => (l && T().layer[l]) ? `<span class="lbadge l-${l}">${T().layer[l]}</span>` : ""
@@ -159,9 +161,9 @@ function header(route) {
     <nav class="crumbs">${crumb}</nav>
     <div class="right">
       <button class="pill menu-btn" data-action="menu" aria-label="${isEn() ? "Open navigation" : "탐색 열기"}">☰</button>
-      <div class="pill" data-action="search">${T().search} <kbd>/</kbd></div>
-      <div class="pill" data-action="lang" title="한국어 / English"><span>${isEn() ? "🌐 EN" : "🌐 한"}</span></div>
-      <div class="pill" data-action="theme"><span class="sun"></span><span>${state.theme === "dark" ? T().night : T().day}</span></div>
+      <button class="pill" data-action="search" aria-label="${isEn() ? "Search" : "검색"}">${T().search} <kbd>/</kbd></button>
+      <button class="pill" data-action="lang" aria-label="${isEn() ? "Switch language" : "언어 전환"}" title="한국어 / English"><span>${isEn() ? "🌐 EN" : "🌐 한"}</span></button>
+      <button class="pill" data-action="theme" aria-label="${isEn() ? "Toggle theme" : "테마 전환"}"><span class="sun"></span><span>${state.theme === "dark" ? T().night : T().day}</span></button>
     </div>
   </div></header>`
 }
@@ -359,7 +361,7 @@ function viewPost(id) {
       <div class="crumb"><a href="#f=${f.id}">${esc(fnameById(p.folderId))}</a><span>/</span><a href="#s=${p.subId}">${esc(p.subName)}</a></div>
       <h1 class="title">${esc(pt(p))}</h1>
       <div class="meta"><span class="dot"></span>${layerTag(p.layer)}<span>${esc(p.dateISO)}</span><span>·</span><span>${esc(p.read)}</span></div>
-      ${p.hero ? `<img class="postHero" src="${esc(p.hero)}" alt="브리핑 인포그래픽" loading="lazy">` : ""}
+      ${p.hero ? `<img class="postHero" src="${esc(p.hero)}" alt="${esc(pt(p))}" loading="lazy">` : ""}
       ${p.audio ? `<div class="audiowrap"><span class="ap-ic">🎙️</span><div class="ap-body"><div class="ap-cap">${isEn() ? "Audio briefing (Korean)" : "오디오로 듣기 — 수진·민호의 브리핑"}</div><audio controls preload="none" src="${esc(p.audio)}"></audio></div></div>` : ""}
       ${noTrans ? `<div class="notrans">${T().notrans}</div>` : ""}
       <div class="md" id="md">${html}</div>
@@ -488,8 +490,9 @@ function render() {
   else if (route.kind === "post") main = viewPost(route.id)
   else if (route.kind === "tag") main = viewTag(route.id)
 
-  root.innerHTML = header(route) +
-    `<div class="grid">${explorer(route)}<main class="main">${main}</main>${asideRight(route)}</div>` +
+  root.innerHTML = `<a class="skip-link" href="#main-content" data-action="skip">${isEn() ? "Skip to content" : "본문 바로가기"}</a>` +
+    header(route) +
+    `<div class="grid">${explorer(route)}<main class="main" id="main-content" tabindex="-1">${main}</main>${asideRight(route)}</div>` +
     footer() +
     searchOverlay()
 
@@ -533,6 +536,7 @@ root.addEventListener("click", (e) => {
     if (a === "search") { state.search = true; render(); return }
     if (a === "search-bg") { state.search = false; render(); return }
     if (a === "menu") { document.body.classList.toggle("menu-open"); return }
+    if (a === "skip") { e.preventDefault(); const m = document.getElementById("main-content"); if (m) { m.focus(); m.scrollIntoView() } return }
   }
   if (e.target.closest("[data-close]")) { state.search = false; setTimeout(render, 0); return }
   const more = e.target.closest("[data-more]")
@@ -606,10 +610,9 @@ function showUpdateBanner() {
   b.querySelector("button").onclick = () => location.reload()
   document.body.appendChild(b)
 }
-setInterval(checkUpdate, 90000)
-checkUpdate()
+if (IS_LOCAL) { setInterval(checkUpdate, 90000); checkUpdate() }  // 공개 정적 호스트에선 /api 없음 → 폴링 생략
 
 /* ---------- 에러 안전장치 (블랙화면 방지 + 서버 보고) ---------- */
-function reportErr(e, where) { try { fetch("/api/clientlog", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ where, msg: String((e && e.message) || e), stack: String((e && e.stack) || ""), hash: location.hash }) }) } catch (x) {} }
+function reportErr(e, where) { try { if (IS_LOCAL) fetch("/api/clientlog", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ where, msg: String((e && e.message) || e), stack: String((e && e.stack) || ""), hash: location.hash }) }) } catch (x) {} }
 window.addEventListener("error", (ev) => reportErr(ev.error || ev.message, "window"))
 window.addEventListener("unhandledrejection", (ev) => reportErr(ev.reason, "promise"))

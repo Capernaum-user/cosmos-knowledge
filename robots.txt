@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://capernaum-user.github.io/cosmos-knowledge/sitemap.xml
