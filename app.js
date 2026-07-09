@@ -158,6 +158,7 @@ function header(route) {
     <a class="brand" href="#home"><b>Cosmos Knowledge</b><span>A GALAXY OF NOTES</span></a>
     <nav class="crumbs">${crumb}</nav>
     <div class="right">
+      <button class="pill menu-btn" data-action="menu" aria-label="${isEn() ? "Open navigation" : "탐색 열기"}">☰</button>
       <div class="pill" data-action="search">${T().search} <kbd>/</kbd></div>
       <div class="pill" data-action="lang" title="한국어 / English"><span>${isEn() ? "🌐 EN" : "🌐 한"}</span></div>
       <div class="pill" data-action="theme"><span class="sun"></span><span>${state.theme === "dark" ? T().night : T().day}</span></div>
@@ -514,6 +515,12 @@ function render() {
 
 /* ---------- events ---------- */
 root.addEventListener("click", (e) => {
+  // 모바일 드로어: 탐색 링크를 누르거나 바깥(오버레이)을 누르면 닫힘(내비게이션은 그대로 진행)
+  if (document.body.classList.contains("menu-open")) {
+    if (e.target.closest(".exrail a") || (!e.target.closest(".exrail") && !e.target.closest('[data-action="menu"]'))) {
+      document.body.classList.remove("menu-open")
+    }
+  }
   const undef = e.target.closest("a.undef")
   if (undef) { e.preventDefault(); state.search = true; state.query = undef.getAttribute("data-q") || ""; render(); return }
   const scroll = e.target.closest("[data-scroll]")
@@ -525,6 +532,7 @@ root.addEventListener("click", (e) => {
     if (a === "lang") { state.lang = isEn() ? "ko" : "en"; try { localStorage.setItem("cosmos-lang", state.lang) } catch (x) {}; render(); return }
     if (a === "search") { state.search = true; render(); return }
     if (a === "search-bg") { state.search = false; render(); return }
+    if (a === "menu") { document.body.classList.toggle("menu-open"); return }
   }
   if (e.target.closest("[data-close]")) { state.search = false; setTimeout(render, 0); return }
   const more = e.target.closest("[data-more]")
@@ -532,6 +540,14 @@ root.addEventListener("click", (e) => {
   const tog = e.target.closest("[data-toggle]")
   if (tog && !e.target.closest("a")) { const id = tog.getAttribute("data-toggle"); state.open[id] = !(state.open[id] ?? tog.classList.contains("open")); render() }
 })
+/* 모바일 드로어: 스크림(바깥) 탭 시 닫기 — 스크림은 #root 밖이라 document에서 처리 */
+document.addEventListener("click", (e) => {
+  if (!document.body.classList.contains("menu-open")) return
+  if (e.target.closest(".exrail") || e.target.closest('[data-action="menu"]')) return
+  document.body.classList.remove("menu-open")
+})
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.body.classList.remove("menu-open") })
+
 /* 그래프 뷰: 노드 호버 → 캡션에 전체 제목·계층 표시 + 노드/이웃 강조 */
 function graphHover(e, on) {
   const g = e.target.closest(".gnode"); if (!g) return
