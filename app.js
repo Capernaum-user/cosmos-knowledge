@@ -312,8 +312,8 @@ function viewHome() {
   </section>
   <section class="feat-note">
     <h2>${en ? 'Explore the knowledge system' : '지식 시스템 둘러보기'}</h2>
-    <p>${en ? 'Interlinked notes across 11 domains — living evidence you can browse as a graph. Everything below is written and maintained by me.'
-           : '11개 도메인에 걸친 상호연결 노트 — 그래프로 탐색 가능한 살아있는 증거입니다. 아래는 전부 직접 쓰고 관리합니다.'}</p>
+    <p>${en ? `Interlinked notes across ${FOLDERS.length} domains — living evidence you can browse as a graph. Everything below is written and maintained by me.`
+           : `${FOLDERS.length}개 도메인에 걸친 상호연결 노트 — 그래프로 탐색 가능한 살아있는 증거입니다. 아래는 전부 직접 쓰고 관리합니다.`}</p>
   </section>
   <div class="tiles">${FOLDERS.map((f) => {
     const lead = leadPost(f.id); const count = f.subs.reduce((a, s) => a + s.posts.length, 0)
