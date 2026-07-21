@@ -1,10 +1,14 @@
 // Cosmos Knowledge — 단독 SPA. Claude Design 충실 재현 + 실제 md 렌더(marked).
 import {
-  SITE, HUE, FOLDERS, TERMS,
+  SITE, HUE, FOLDERS, TERMS, STATS,
   postById, folderById, subById, leadPost, allTags, postsByTag,
   backlinksOf, recentPosts, searchPosts, resolveLink, localGraph,
 } from "./garden-data.js"
 import { createGalaxy } from "./galaxy-field.js"
+import {
+  stackStrip, howSection, featNote, graphLegend,
+  clampLabel, labelCaps, hubRadius, ringLayout, RING_MAX,
+} from "./home-explain.js"
 
 const TOKENS = {
   dark: {
@@ -111,6 +115,7 @@ const UI = {
     noToc: "목차 없음", noResult: "결과가 없어요.", searchHint: "제목 · 요약 · 태그 · 본문으로 찾기",
     searchPh: "제목 · 요약 · 태그…", more: (n) => `＋ ${n}개 더 보기`, fold: "접기",
     notrans: "🌐 이 노트는 아직 영문판이 없어 한국어로 표시됩니다.",
+    gxhead: "이 그래프는?", hubs: "개 허브", hubmap: " · 허브 지도", plusMore: (n) => `외 ${n}개`,
     layer: { overview: "요약", deep: "상세", term: "용어" } },
   en: { explore: "EXPLORE", graph: "GRAPH VIEW", toc: "CONTENTS", backlinks: "BACKLINKS", tags: "TAGS",
     recent: "RECENT NOTES", related: "Related notes", search: "Search", find: "Find",
@@ -118,6 +123,7 @@ const UI = {
     noToc: "No contents", noResult: "No results.", searchHint: "Search title · summary · tags · body",
     searchPh: "title · summary · tags…", more: (n) => `＋ ${n} more`, fold: "Fold",
     notrans: "🌐 English version not available yet — showing Korean.",
+    gxhead: "WHAT IS THIS?", hubs: " hubs", hubmap: " · hub map", plusMore: (n) => `+${n} more`,
     layer: { overview: "Overview", deep: "Deep", term: "Term" } },
 }
 const T = () => UI[state.lang] || UI.ko
@@ -206,43 +212,97 @@ function explorer(route) {
 }
 
 function graphData(route) {
-  let ids = [], centerId = null
-  if (route.kind === "post") { const g = localGraph(route.id); centerId = route.id; ids = g.nodes.map((n) => n.id) }
-  else if (route.kind === "folder") { const f = folderById(route.id); ids = f ? f.subs.flatMap((s) => s.posts).slice(0, 10).map((p) => p.id) : [] }
-  else if (route.kind === "sub") { const s = subById(route.id); ids = s ? s.posts.slice(0, 10).map((p) => p.id) : [] }
-  else if (route.kind === "tag") { ids = postsByTag(route.id).slice(0, 10).map((p) => p.id) }
-  else { ids = FOLDERS.map((f) => leadPost(f.id)).filter(Boolean).map((p) => p.id) }
-  const nodes = ids.map(postById).filter(Boolean)
-  const W = 260, H = 200, cx = W / 2, cy = H / 2, pos = {}
-  const ring = nodes.filter((n) => n.id !== centerId)
-  if (centerId) pos[centerId] = { x: cx, y: cy }
-  ring.forEach((n, i) => { const a = (i / Math.max(1, ring.length)) * Math.PI * 2 - Math.PI / 2; const R = 74; pos[n.id] = { x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R * 0.82 } })
-  const set = new Set(nodes.map((n) => n.id)), edges = [], seen = new Set()
-  nodes.forEach((n) => (n.links || []).forEach((t) => { if (set.has(t)) { const k = [n.id, t].sort().join("|"); if (!seen.has(k)) { seen.add(k); edges.push([n.id, t]) } } }))
-  if (centerId) ring.forEach((n) => { const k = [centerId, n.id].sort().join("|"); if (!seen.has(k)) { seen.add(k); edges.push([centerId, n.id]) } })
-  return { nodes, pos, edges, centerId }
+  let ids = [], centerId = null, hub = false, hidden = 0, nodes = null
+  if (route.kind === "post") {
+    const g = localGraph(route.id); centerId = route.id
+    // 연결도 내림차순 상위 RING_MAX + 중심. 자르는 기준을 명시해 '무엇이 남는가'의 정당성을 확보한다.
+    const deg = (id) => { const p = postById(id); return p ? (p.links || []).length + backlinksOf(id).length : 0 }
+    const rest = g.nodes.map((n) => n.id).filter((id) => id !== route.id)
+      .sort((a, b) => deg(b) - deg(a) || (a < b ? -1 : 1))   // 동점 tie-break = 재현성
+    hidden = Math.max(0, rest.length - RING_MAX)
+    ids = [route.id, ...rest.slice(0, RING_MAX)]             // ← nodes[0] = 중심 (범례 hueList[0]의 근거)
+  } else if (route.kind === "folder") {
+    const f = folderById(route.id); ids = f ? f.subs.flatMap((s) => s.posts).slice(0, 10).map((p) => p.id) : []
+  } else if (route.kind === "sub") {
+    const s = subById(route.id); ids = s ? s.posts.slice(0, 10).map((p) => p.id) : []
+  } else if (route.kind === "tag") {
+    ids = postsByTag(route.id).slice(0, 10).map((p) => p.id)
+  } else {
+    // 홈: 허브 지도. 노드=허브(폴더), 엣지=허브 간 교차링크가 1개 이상 존재하는 쌍(STATS.hubEdges).
+    hub = true
+    nodes = FOLDERS.map((f) => ({
+      id: f.id, title: f.name, title_en: f.en || f.name, nav: f.nav || "", hue: f.hue, layer: "",
+      count: f.subs.reduce((a, s) => a + s.posts.length, 0),
+    }))
+  }
+  if (!nodes) nodes = ids.map(postById).filter(Boolean)
+  const { pos, ring } = ringLayout(nodes, centerId)
+  let edges = []
+  if (hub) {
+    edges = (STATS.hubEdges || []).map((e) => [e[0], e[1]])
+  } else {
+    const set = new Set(nodes.map((n) => n.id)), seen = new Set()
+    nodes.forEach((n) => (n.links || []).forEach((t) => {
+      if (set.has(t)) { const k = [n.id, t].sort().join("|"); if (!seen.has(k)) { seen.add(k); edges.push([n.id, t]) } }
+    }))
+    // 방어용: localGraph 정의상 실제로는 0개가 추가된다(실측 301/301에서 0). 정의가 바뀌어도 고아 노드를 막는다.
+    if (centerId) ring.forEach((n) => { const k = [centerId, n.id].sort().join("|"); if (!seen.has(k)) { seen.add(k); edges.push([centerId, n.id]) } })
+  }
+  return { nodes, pos, ring, edges, centerId, hub, hidden }
 }
-function graphSVG(route) {
-  const { nodes, pos, edges, centerId } = graphData(route)
+
+// data를 넘기면 graphData를 다시 부르지 않는다(asideRight가 범례 meta를 같은 데이터에서 뽑기 위해 넘긴다).
+function graphSVG(route, data) {
+  const { nodes, pos, ring, edges, centerId, hub, hidden } = data || graphData(route)
   if (nodes.length < 2) return ""
-  const lines = edges.map(([a, b]) => `<line class="gedge" data-a="${a}" data-b="${b}" x1="${pos[a].x.toFixed(1)}" y1="${pos[a].y.toFixed(1)}" x2="${pos[b].x.toFixed(1)}" y2="${pos[b].y.toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`).join("")
+  const es = edges.filter(([a, b]) => pos[a] && pos[b])          // 공개 빌드에서 허브가 사라져도 안전
+  const lines = es.map(([a, b]) =>
+    `<line class="gedge" data-a="${a}" data-b="${b}" x1="${pos[a].x.toFixed(1)}" y1="${pos[a].y.toFixed(1)}" x2="${pos[b].x.toFixed(1)}" y2="${pos[b].y.toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`).join("")
+  const hr = hub ? hubRadius(nodes) : null
+  const radiusOf = hub ? ((n) => hr.r(n)) : ((n) => (pos[n.id] && pos[n.id].center ? 7 : 5))
+  const DY_RING = hub ? Math.round(hr.maxR + 8) : 13             // 그래프 전체에 단 하나의 세로 오프셋
+  const caps = labelCaps(nodes, pos, { ringLen: ring.length, radiusOf, dyRing: DY_RING, dyCenter: 17 })
+  const base = hub ? "#f=" : "#p="
   const gs = nodes.map((n) => {
     const c = n.id === centerId, p = pos[n.id]
-    const t = pt(n)
-    const short = t.length > 9 ? t.slice(0, 8) + "…" : t
-    return `<g class="gnode${c ? " center" : ""}" data-id="${n.id}" data-t="${esc(t)}" data-l="${esc(n.layer || "")}">`
-      + `<a href="#p=${n.id}"><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${c ? 7 : 5}" fill="${hueHex(n.hue)}" stroke="var(--page-bg)" stroke-width="1.5" opacity="${c ? 1 : 0.86}"><title>${esc(t)}</title></circle></a>`
-      + `<text class="glabel" x="${p.x.toFixed(1)}" y="${(p.y + (c ? 17 : 13)).toFixed(1)}" text-anchor="middle">${esc(short)}</text>`
+    const r = radiusOf(n)
+    const full = hub ? (isEn() ? (n.title_en || n.title) : (n.nav || n.title)) : pt(n)
+    const whole = hub ? (isEn() ? (n.title_en || n.title) : n.title) : pt(n)   // 호버·title용 전체 이름
+    // 허브 원의 크기는 로그 비례라 중간 허브끼리 눈으로 구분되지 않는다(실측: 12개 중 7개가 지름 2px 안에 몰림).
+    // 범례가 그 한계를 자백하는 대신, 정확한 노트 수를 캡션과 네이티브 툴팁이 제공한다.
+    const capName = hub ? `${whole} · ${n.count}${T().notes}` : whole
+    const short = clampLabel(full, caps[n.id], hub)
+    const ly = (p.y + (c ? 17 : DY_RING)).toFixed(1)
+    return `<g class="gnode${c ? " center" : ""}" data-id="${n.id}" data-t="${esc(capName)}" data-l="${esc(n.layer || "")}">`
+      + `<a href="${base}${n.id}"><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(2)}" fill="${hueHex(n.hue)}" stroke="var(--page-bg)" stroke-width="1.5" opacity="${hub ? 0.92 : (c ? 1 : 0.86)}"><title>${esc(capName)}</title></circle></a>`
+      + `<text class="glabel" x="${p.x.toFixed(1)}" y="${ly}" text-anchor="middle">${esc(short)}</text>`
       + `</g>`
   }).join("")
-  const def = `${nodes.length}${T().notes} · ${edges.length}${T().conns}`
+  const unit = hub ? T().hubs : T().notes
+  const scope = hub ? T().hubmap : ""
+  const more = hidden > 0 ? ` · ${T().plusMore(hidden)}` : ""
+  const def = `${nodes.length}${unit} · ${es.length}${T().conns}${scope}${more}`
   return `<div class="rail"><div class="railhead">${T().graph}</div>
     <svg class="graphsvg" viewBox="0 0 260 214" style="width:100%;height:auto;display:block;overflow:visible">${lines}${gs}</svg>
-    <div class="graph-cap" id="graph-cap" data-default="${def}">${def}</div></div>`
+    <div class="graph-cap" id="graph-cap" data-default="${esc(def)}">${esc(def)}</div></div>`
 }
 function asideRight(route) {
   const boxes = []
-  { const g = graphSVG(route); if (g) boxes.push(g) }
+  { const gd = graphData(route)
+    const g = graphSVG(route, gd)
+    if (g) {
+      boxes.push(g)
+      // 범례가 화면에 없는 색을 그리지 않도록, '실제로 그려진 색 목록'을 그대로 넘긴다.
+      // Set은 삽입 순서를 유지하므로 post 라우트에서는 hueList[0]이 곧 중심 노드의 색이다.
+      const meta = {
+        hueList: [...new Set(gd.nodes.map((n) => n.hue))],
+        n: gd.ring.length + gd.hidden,                    // 자르기 '전' 이웃 총수
+        hidden: gd.hidden,
+      }
+      boxes.push(`<div class="rail gx-rail"><div class="railhead">${T().gxhead}</div>`
+        + graphLegend(route, isEn(), { hover: true, meta })
+        + `</div>`)
+    } }
   if (route.kind === "post") {
     const p = postById(route.id)
     boxes.push(`<div class="rail" style="--hue:${hueHex(p.hue)}"><div class="railhead">${T().toc}</div><div class="toc" id="toc"></div></div>`)
@@ -298,23 +358,23 @@ function viewHome() {
       <a class="cta" href="${esc(S.github)}" target="_blank" rel="noopener">GitHub</a>
       <a class="cta" href="mailto:${esc(S.email)}">${en ? 'Contact' : '연락'}</a>
     </div>`
+  const strip = stackStrip(en)
+  const how = howSection(en)
   return `<section class="phero">
     <div class="pen">${en ? esc(S.roleEn || '') : esc(S.role || '')}</div>
     <h1 class="phero-name">${esc(S.author)}<span class="phero-en">${esc(S.authorEn)}</span></h1>
     <p class="phero-tag">${en ? esc(S.taglineEn) : esc(S.tagline)}</p>
     ${cta}
   </section>
+  ${strip}
   <section class="feat">
     <div class="feat-head">${en ? 'Featured work' : '대표 작업'}</div>
     <div class="feat-grid">${feat.map((f) => `<a class="feat-card" href="#p=${f.id}">
       <div class="fc-k"><span class="fc-e">${f.e}</span>${esc(f.k)}</div>
       <div class="fc-t">${esc(f.t)}</div><div class="fc-d">${esc(f.d)}</div></a>`).join("")}</div>
   </section>
-  <section class="feat-note">
-    <h2>${en ? 'Explore the knowledge system' : '지식 시스템 둘러보기'}</h2>
-    <p>${en ? `Interlinked notes across ${FOLDERS.length} domains — living evidence you can browse as a graph. Everything below is written and maintained by me.`
-           : `${FOLDERS.length}개 도메인에 걸친 상호연결 노트 — 그래프로 탐색 가능한 살아있는 증거입니다. 아래는 전부 직접 쓰고 관리합니다.`}</p>
-  </section>
+  ${how}
+  ${featNote(en)}
   <div class="tiles">${FOLDERS.map((f) => {
     const lead = leadPost(f.id); const count = f.subs.reduce((a, s) => a + s.posts.length, 0)
     return `<a class="tile" href="#f=${f.id}" style="--hue:${hueHex(f.hue)}">
@@ -509,7 +569,8 @@ function render() {
     if (md) { neutralizeExternalLinks(md); renderDiagrams(md).then(() => autolinkTerms(md)).catch((e) => reportErr(e, "diagrams")) }
   }
   if (state.search) { const i = document.getElementById("searchInput"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length) } }
-  if (route.kind !== "post" || !location.hash.includes("#h-")) window.scrollTo(0, 0)
+  if (state.keepScroll != null) { const y = state.keepScroll; state.keepScroll = null; window.scrollTo(0, y) }
+  else if (route.kind !== "post" || !location.hash.includes("#h-")) window.scrollTo(0, 0)
   } catch (e) {
     reportErr(e, "render " + location.hash)
     root.innerHTML = `<div class="renderfail"><h2>표시 중 문제가 생겼어요</h2><p>이 페이지를 그리는 중 오류가 났습니다.</p><div class="rf-btns"><a href="#home">홈으로</a><button onclick="location.reload()">새로고침</button></div><pre>${esc(String((e && e.stack) || (e && e.message) || e))}</pre></div>`
@@ -526,13 +587,17 @@ root.addEventListener("click", (e) => {
   }
   const undef = e.target.closest("a.undef")
   if (undef) { e.preventDefault(); state.search = true; state.query = undef.getAttribute("data-q") || ""; render(); return }
+  const gx = e.target.closest("[data-gx]")
+  if (gx) { const b = document.getElementById("gxbody"); setGx(!!(b && b.hasAttribute("hidden"))); return }
+  const gxo = e.target.closest("[data-gx-open]")
+  if (gxo) setGx(true)   // return 하지 않는다 → 바로 아래 [data-scroll] 처리로 이어져 그 위치로 스크롤된다
   const scroll = e.target.closest("[data-scroll]")
   if (scroll) { const t = document.getElementById(scroll.getAttribute("data-scroll")); if (t) t.scrollIntoView({ behavior: "smooth" }); return }
   const act = e.target.closest("[data-action]")
   if (act) {
     const a = act.getAttribute("data-action")
     if (a === "theme") { state.theme = state.theme === "dark" ? "light" : "dark"; try { localStorage.setItem("cosmos-theme", state.theme) } catch (x) {}; applyTheme(state.theme); render(); return }
-    if (a === "lang") { state.lang = isEn() ? "ko" : "en"; try { localStorage.setItem("cosmos-lang", state.lang) } catch (x) {}; render(); return }
+    if (a === "lang") { state.lang = isEn() ? "ko" : "en"; try { localStorage.setItem("cosmos-lang", state.lang) } catch (x) {}; state.keepScroll = window.scrollY; render(); return }
     if (a === "search") { state.search = true; render(); return }
     if (a === "search-bg") { state.search = false; render(); return }
     if (a === "menu") { document.body.classList.toggle("menu-open"); return }
@@ -553,9 +618,22 @@ document.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.body.classList.remove("menu-open") })
 
 /* 그래프 뷰: 노드 호버 → 캡션에 전체 제목·계층 표시 + 노드/이웃 강조 */
+/* 그래프 가이드 접기/펼치기 — render()를 부르면 안 된다(render 말미 512행에서 window.scrollTo(0,0)).
+   상태는 localStorage에만 남긴다. render()가 root.innerHTML을 전면 교체하므로 DOM 상태는 사라진다. */
+function setGx(open) {
+  const body = document.getElementById("gxbody"); if (!body) return
+  if (open) body.removeAttribute("hidden"); else body.setAttribute("hidden", "")
+  const tog = document.querySelector("[data-gx]")
+  if (tog) {
+    tog.setAttribute("aria-expanded", open ? "true" : "false")
+    const car = tog.querySelector(".gx-car"); if (car) car.textContent = open ? "▴" : "▾"
+  }
+  try { localStorage.setItem("cosmos-gx", open ? "1" : "0") } catch (x) {}
+}
 function graphHover(e, on) {
   const g = e.target.closest(".gnode"); if (!g) return
-  const svg = g.closest(".graphsvg"); const cap = document.getElementById("graph-cap"); if (!svg || !cap) return
+  const svg = g.closest(".graphsvg"); const cap = (g.closest(".rail") || document).querySelector(".graph-cap")
+  if (!svg || !cap) return
   const id = g.getAttribute("data-id")
   svg.querySelectorAll(".gedge").forEach((ln) => ln.classList.toggle("hot", on && (ln.getAttribute("data-a") === id || ln.getAttribute("data-b") === id)))
   svg.querySelectorAll(".gnode").forEach((nn) => { if (nn !== g) nn.classList.toggle("dim", on) })

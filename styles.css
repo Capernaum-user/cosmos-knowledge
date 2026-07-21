@@ -30,10 +30,12 @@ a{color:inherit;text-decoration:none}
 
 /* layout */
 .grid{max-width:1520px;margin:0 auto;display:grid;grid-template-columns:216px minmax(0,1fr) 244px;gap:22px;padding:26px 24px 80px;align-items:start}
-@media(max-width:1080px){.grid{grid-template-columns:1fr}.aside,.exrail{display:none}}
 .rail{background:var(--rail);border:1px solid var(--line-soft);border-radius:16px;padding:14px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
 .exrail{position:sticky;top:82px;max-height:calc(100vh - 104px);overflow:auto;padding:14px 10px}
 .aside{position:sticky;top:82px;display:flex;flex-direction:column;gap:16px}
+/* ↓ 반드시 .aside/.exrail 뒤에 와야 한다. 앞에 두면 무조건부 .aside{display:flex}가 동일 특이도로 이겨
+   1080px 이하에서도 244px 레일이 남아 가로 스크롤이 생긴다(2026-07-20 수정). */
+@media(max-width:1080px){.grid{grid-template-columns:1fr}.aside,.exrail{display:none}}
 .railhead{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--text-faint);margin-bottom:9px}
 .main{min-width:0}
 
@@ -63,7 +65,7 @@ a{color:inherit;text-decoration:none}
 .graphsvg .gnode.hot .glabel{fill:var(--text);opacity:1;font-size:8px;font-weight:700}
 .graphsvg .gnode.dim{opacity:.4}
 .graphsvg .gedge.hot{stroke:var(--accent);stroke-width:1.6}
-.graph-cap{font-family:var(--mono);font-size:11px;color:var(--text-faint);text-align:center;margin-top:6px;min-height:2.4em;line-height:1.35;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.graph-cap{font-family:var(--mono);font-size:11px;color:var(--text-faint);text-align:center;margin-top:6px;min-height:3.6em;line-height:1.35;display:flex;align-items:center;justify-content:center;padding:0 4px}
 .graph-cap.on{color:var(--text);font-weight:600}
 /* 영문판 미보유 안내 배지 */
 .notrans{font-size:12.5px;color:var(--text-dim);background:var(--chip);border:1px dashed var(--line);border-radius:10px;padding:8px 12px;margin:12px 0 0}
@@ -252,7 +254,87 @@ a{color:inherit;text-decoration:none}
 .foot-links{display:flex;flex-wrap:wrap;gap:16px}
 .foot-links a{font-size:13.5px;color:var(--link);text-decoration:none;font-weight:600}
 .foot-links a:hover{color:var(--accent)}
-@media(max-width:760px){.feat-grid{grid-template-columns:1fr}.foot-in{flex-direction:column;align-items:flex-start}}
+/* == BEGIN home-explain block (2026-07-20) == */
+.stackstrip{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center;max-width:920px;margin:14px auto 0;padding:0 22px}
+.sschip{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--text-dim);background:var(--chip);border:1px solid var(--line-soft);border-radius:999px;padding:5px 12px}
+.sslink{font:inherit;font-family:var(--mono);font-size:11px;color:var(--accent);background:none;border:0;cursor:pointer;padding:5px 6px;letter-spacing:.04em}
+.sslink:hover{text-decoration:underline}
+
+.how{max-width:1120px;margin:34px auto 6px;padding:0 18px}
+.how-head{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);margin:0 0 14px;text-align:center}
+.how-flow{display:grid;grid-template-columns:repeat(5,1fr);gap:18px}
+.how-stage{position:relative;background:var(--panel-2);border:1px solid var(--line);border-radius:16px;padding:16px 14px 14px;text-align:center;transition:opacity .14s ease,border-color .14s ease}
+/* 커넥터 화살표의 보이는 변(border-left)은 var(--text-faint)다 — var(--line)은 페이지 배경 위에서
+   대비 1.31:1(다크)/1.27:1(라이트)이라 사실상 보이지 않는데, §6 (11)-3과 (12) 390px가 이 화살표의
+   방향 전환을 눈으로 확인하라고 요구한다. --line은 헤어라인 '테두리'용 토큰이지 독립 글리프용이 아니다 (R3).
+   나머지 두 변(border-top/bottom)은 삼각형을 만드는 투명 변이므로 transparent 그대로 둔다. */
+.how-stage::after{content:"";position:absolute;right:-13px;top:50%;margin-top:-5px;width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:7px solid var(--text-faint)}
+.how-stage:last-child::after{display:none}
+.how-flow:hover .how-stage{opacity:.55}
+.how-flow .how-stage:hover{opacity:1;border-color:var(--accent)}
+.hs-svg{display:block;margin:0 auto 10px;width:56px;height:40px}
+.hs-svg .hs-auto{font-family:var(--mono);font-size:6px;letter-spacing:.08em;fill:var(--accent)}
+.hs-k{font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;color:var(--accent);margin-bottom:5px}
+.hs-t{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;overflow-wrap:anywhere}
+.hs-d{font-size:12px;line-height:1.55;color:var(--text-dim)}
+
+.how-night{max-width:620px;margin:24px auto 0;padding:14px 16px 12px;border:1px dashed var(--line);border-radius:16px;background:var(--rail);text-align:center}
+.hn-lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.02em;color:var(--text-faint);margin-bottom:8px;line-height:1.6}
+.hn-svg{width:100%;height:auto;display:block;max-width:320px;margin:0 auto}
+.hn-svg .hn-tick{font-family:var(--mono);font-size:6.5px;fill:var(--text-faint)}
+.hn-cap{font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:6px;line-height:1.5}
+
+.how-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:24px}
+.fact{display:block;width:100%;font:inherit;text-align:center;border:1px solid var(--line-soft);border-radius:12px;background:var(--rail);padding:12px 13px;color:inherit;text-decoration:none;cursor:pointer;transition:transform .12s ease,border-color .12s ease}
+.fact:hover{transform:translateY(-2px);border-color:var(--accent)}
+.fact b{display:block;font-family:var(--mono);font-size:14px;color:var(--accent);margin-bottom:4px}
+.fact span{font-size:11.5px;color:var(--text-faint);line-height:1.5}
+
+/* 그래프 라벨 후광 — 링 안쪽을 지나는 엣지가 글자를 관통해도 글자가 끊기지 않게 한다.
+   라벨 baseline이 항상 노드 아래라 상반부 노드의 라벨은 구조적으로 링 내부에 놓인다(§C3-4 '보장하지 않는 것').
+   stroke 폭은 글꼴 크기의 약 0.17em(6.5 user unit에 1.1). paint-order:stroke가 있어야 후광이 글자 뒤로 간다.
+   ⚠ 이 값을 키우지 말 것 (R4): paint-order:stroke는 윤곽선 기준 안팎 대칭이라 폭의 절반이 글리프 '안쪽'을
+   잠식한다. 실제 렌더 크기는 5.35 CSS px(스케일 0.8231)이고 카운터는 1~2 user unit이라,
+   v4의 1.8px(0.277em·안쪽 0.9 unit)은 o·a의 구멍과 한글 자소 사이 공백을 닫아버릴 수 있었다.
+   차폐는 폭이 아니라 알파가 만든다 — opacity .72 × --panel 0.74 = 유효 알파 0.53 위에서
+   엣지(--line 알파 0.10)의 잔여 대비가 1.13:1이라 1.1px로도 선이 글자 위에서 사라진다.
+   var(--page-bg)는 radial-gradient라 stroke에 쓸 수 없으므로 var(--panel)을 쓴다(다크·라이트 양쪽에 정의돼 있다). */
+.graphsvg .glabel{paint-order:stroke;stroke:var(--panel);stroke-width:1.1px;stroke-linejoin:round}
+.graphsvg .gnode.hot .glabel{stroke-width:1.4px}
+
+.gx-block{margin-top:30px;padding-top:24px;border-top:1px solid var(--line-soft)}
+.gx-tog{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:none;border:0;padding:6px 0;cursor:pointer;font:inherit;font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-faint)}
+.gx-tog:hover{color:var(--accent)}
+.gx-body{max-width:640px;margin:14px auto 0}
+.gx-where{font-size:13px;line-height:1.7;color:var(--text-dim);text-align:center;margin:0 0 14px}
+.gx-demolab{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-faint);text-align:center;margin-bottom:4px}
+.gx-svg{width:100%;height:auto;display:block;overflow:visible}
+.gx-leadnote{font-family:var(--mono);font-size:10px;color:var(--text-faint);text-align:center;margin:2px 0 14px}
+.gg-e{stroke:var(--line);stroke-width:1.2}
+.gg-lead{stroke:var(--line);stroke-dasharray:2 3;stroke-width:1;fill:none}
+.gg-lab{font-family:var(--mono);font-size:9.5px;fill:var(--text-faint)}
+
+/* 그래프 범례 — 본문·레일 공용 */
+.gx-scope{font-size:12.5px;color:var(--text);font-weight:600;margin-bottom:9px;line-height:1.5}
+.gx-row{display:flex;align-items:center;gap:9px;margin-bottom:7px;font-size:11.5px;color:var(--text-dim);line-height:1.45}
+.gx-sw{flex:0 0 auto;width:30px;height:14px}
+.gx-sub{font-size:10.5px;color:var(--text-faint);line-height:1.5;margin:-2px 0 8px 39px}
+.gx-hint{font-size:11px;color:var(--text-faint);border-top:1px dashed var(--line);padding-top:8px;margin-top:9px;line-height:1.5}
+.gx-body .gx-scope{text-align:center}
+.gx-body .gx-sub{margin-left:0;text-align:center}
+.gx-mobile{display:none}
+.gx-body .gx-mobile{border-top:0;padding-top:0;margin:0 0 12px;text-align:center}
+@media(max-width:1080px){.gx-mobile{display:block}}
+/* == END home-explain block == */
+@media(max-width:760px){
+  .feat-grid{grid-template-columns:1fr}
+  .foot-in{flex-direction:column;align-items:flex-start}
+  .how-flow{grid-template-columns:1fr}
+  .how-stage::after{right:auto;left:50%;top:auto;bottom:-13px;margin:0 0 0 -5px;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid var(--text-faint);border-bottom:0}
+  .how-facts{grid-template-columns:repeat(2,1fr)}
+  .gg-lab,.gg-lead{display:none}
+  .gx-leadnote{display:none}
+}
 
 /* ===== 모바일 내비게이션 드로어 (2026-07-10) ===== */
 .menu-btn{display:none;cursor:pointer;font-size:16px;line-height:1}
