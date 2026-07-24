@@ -1,6 +1,6 @@
 // Cosmos Knowledge — 단독 SPA. Claude Design 충실 재현 + 실제 md 렌더(marked).
 import {
-  SITE, HUE, FOLDERS, TERMS, STATS,
+  SITE, HUE, FOLDERS, GROUPS, TERMS, STATS,
   postById, folderById, subById, leadPost, allTags, postsByTag,
   backlinksOf, recentPosts, searchPosts, resolveLink, localGraph,
 } from "./garden-data.js"
@@ -136,6 +136,21 @@ const fname = (f) => (isEn() ? (f.en || f.name) : f.name)
 const fnameById = (fid) => { const f = folderById(fid); return f ? fname(f) : fid }
 const sname = (s) => (isEn() ? (s.slug ? s.slug.charAt(0).toUpperCase() + s.slug.slice(1) : s.name) : s.name)
 
+// 13개 허브를 GROUPS(config/hub-groups.json)에 따라 4개+기타로 묶는다. content/**는 건드리지 않는
+// 표시 전용 재배열 — GROUPS가 비어 있으면(폴백) null을 반환해 호출부가 기존 단일 그리드로 되돌아간다.
+function folderGroups() {
+  if (!GROUPS || !GROUPS.length) return null
+  const used = new Set()
+  const groups = GROUPS.map((g) => {
+    const folders = (g.hubs || []).map(folderById).filter(Boolean)
+    folders.forEach((f) => used.add(f.id))
+    return { slug: g.slug, label: g.label, en: g.en, color: g.color, folders }
+  }).filter((g) => g.folders.length)
+  const rest = FOLDERS.filter((f) => !used.has(f.id))
+  if (rest.length) groups.push({ slug: "others", label: "기타", en: "Others", color: "#C2CCD8", folders: rest })
+  return groups
+}
+
 function applyTheme(t) {
   const tk = TOKENS[t] || TOKENS.dark
   for (const k in tk) document.documentElement.style.setProperty(k, tk[k])
@@ -185,29 +200,34 @@ function navPosts(s, route) {
     : (showAll && s.posts.length > NAV_LIMIT ? `<button class="exp-more" data-more="${s.id}">${T().fold}</button>` : "")
   return `<div class="exp-kids">${items}${more}</div>`
 }
+function folderRow(f, route, activeFolder) {
+  const open = state.open[f.id] ?? (f.id === activeFolder)
+  const count = f.subs.reduce((a, s) => a + s.posts.length, 0)
+  return `<div class="exp-folder" style="--hue:${hueHex(f.hue)}">
+    <div class="row ${open ? "open" : ""}" data-toggle="${f.id}">
+      <span class="chev">▶</span><span class="dot"></span>
+      <a class="nm" href="#f=${f.id}">${esc(fname(f))}</a><span class="ct">${count}</span>
+    </div>
+    ${open ? `<div class="exp-kids">${f.subs.map((s) => {
+      const so = state.open[s.id] ?? (route.kind === "post" ? postById(route.id)?.subId === s.id : route.id === s.id)
+      return `<div class="exp-sub">
+        <div class="row ${so ? "open" : ""}" data-toggle="${s.id}">
+          <span class="chev">▶</span><a class="nm" href="#s=${s.id}">${esc(sname(s))}</a><span class="ct">${s.posts.length}</span>
+        </div>
+        ${so ? navPosts(s, route) : ""}
+      </div>`
+    }).join("")}</div>` : ""}
+  </div>`
+}
 function explorer(route) {
   const activeFolder = route.kind === "folder" ? route.id : route.kind === "sub" ? subById(route.id)?.folderId : route.kind === "post" ? postById(route.id)?.folderId : null
+  const groups = folderGroups()
+  const body = groups
+    ? groups.map((g) => `<div class="exgroup-head">${esc(isEn() ? g.en : g.label)}</div>${g.folders.map((f) => folderRow(f, route, activeFolder)).join("")}`).join("")
+    : FOLDERS.map((f) => folderRow(f, route, activeFolder)).join("")
   return `<aside class="rail exrail kg-scroll exrail-box">
     <div class="railhead">${T().explore}</div>
-    ${FOLDERS.map((f) => {
-      const open = state.open[f.id] ?? (f.id === activeFolder)
-      const count = f.subs.reduce((a, s) => a + s.posts.length, 0)
-      return `<div class="exp-folder" style="--hue:${hueHex(f.hue)}">
-        <div class="row ${open ? "open" : ""}" data-toggle="${f.id}">
-          <span class="chev">▶</span><span class="dot"></span>
-          <a class="nm" href="#f=${f.id}">${esc(fname(f))}</a><span class="ct">${count}</span>
-        </div>
-        ${open ? `<div class="exp-kids">${f.subs.map((s) => {
-          const so = state.open[s.id] ?? (route.kind === "post" ? postById(route.id)?.subId === s.id : route.id === s.id)
-          return `<div class="exp-sub">
-            <div class="row ${so ? "open" : ""}" data-toggle="${s.id}">
-              <span class="chev">▶</span><a class="nm" href="#s=${s.id}">${esc(sname(s))}</a><span class="ct">${s.posts.length}</span>
-            </div>
-            ${so ? navPosts(s, route) : ""}
-          </div>`
-        }).join("")}</div>` : ""}
-      </div>`
-    }).join("")}
+    ${body}
   </aside>`
 }
 
@@ -338,6 +358,25 @@ function footer() {
   </div></footer>`
 }
 
+/* ---------- md-hero: 첫 방문자용 매커니즘 선언 (이 화면 = 마크다운 문서) ---------- */
+function mdManifesto(en) {
+  const n = (x) => (x || 0).toLocaleString(en ? "en-US" : "ko-KR")
+  const chips = [
+    [n(STATS.notes), en ? "notes" : "노트"],
+    [n(STATS.wikilinks), en ? "wiki-links" : "위키링크"],
+    [n(STATS.terms), en ? "terms" : "용어"],
+    [n(STATS.diagrams), en ? "diagrams" : "다이어그램"],
+  ]
+  return `<section class="md-hero">
+    <div class="mdh-eyebrow">${en ? "THIS IS NOT AN ORDINARY WEBPAGE" : "이 사이트는 보통 웹페이지가 아닙니다"}</div>
+    <h2 class="mdh-head">${en ? "Every screen you see here is a <b>Markdown document</b>" : "지금 보시는 모든 화면은 <b>마크다운(.md) 문서</b>입니다"}</h2>
+    <p class="mdh-body">${en
+      ? `<b>${n(STATS.notes)} notes</b> written by <b>TaeHyang Kwon</b> live here as plain .md files, and a self-built engine renders them into this screen. It began with Quartz — then the engine was rebuilt from scratch. Whatever you open, you are reading one person's actual working documents.`
+      : `권태향이 직접 쓴 <b>노트 ${n(STATS.notes)}편</b>이 .md 원본 그대로 살아 있고, 직접 만든 엔진이 그것을 지금 이 화면으로 렌더합니다. Quartz로 시작해 엔진을 통째로 다시 만들었습니다 — 어떤 페이지를 열어도, 당신은 한 사람의 실제 작업 문서를 읽고 있는 것입니다.`}</p>
+    <div class="mdh-chips">${chips.map(([v, k]) => `<span class="mdh-chip"><b>${v}</b> ${k}</span>`).join("")}</div>
+  </section>`
+}
+
 /* ---------- views ---------- */
 function viewHome() {
   const en = isEn(), S = SITE
@@ -360,7 +399,8 @@ function viewHome() {
     </div>`
   const strip = stackStrip(en)
   const how = howSection(en)
-  return `<section class="phero">
+  return `${mdManifesto(en)}
+  <section class="phero">
     <div class="pen">${en ? esc(S.roleEn || '') : esc(S.role || '')}</div>
     <h1 class="phero-name">${esc(S.author)}<span class="phero-en">${esc(S.authorEn)}</span></h1>
     <p class="phero-tag">${en ? esc(S.taglineEn) : esc(S.tagline)}</p>
@@ -375,15 +415,27 @@ function viewHome() {
   </section>
   ${how}
   ${featNote(en)}
-  <div class="tiles">${FOLDERS.map((f) => {
-    const lead = leadPost(f.id); const count = f.subs.reduce((a, s) => a + s.posts.length, 0)
-    return `<a class="tile" href="#f=${f.id}" style="--hue:${hueHex(f.hue)}">
-      <div class="th"><span class="dot"></span><h3>${esc(fname(f))}</h3><span class="ct">${count}</span></div>
-      <div class="desc">${esc(f.desc)}</div>
-      ${lead ? `<div class="lead"><div class="k">${isEn() ? "Featured" : "대표 노트"}</div><div class="t">${esc(pt(lead))}</div><div class="s">${esc(ps(lead))}</div></div>` : ""}
-      <div class="chips">${f.subs.map((s) => `<span class="subchip">${esc(sname(s))}</span>`).join("")}</div>
-    </a>`
-  }).join("")}</div>`
+  ${homeTiles()}`
+}
+function tileHtml(f) {
+  const lead = leadPost(f.id); const count = f.subs.reduce((a, s) => a + s.posts.length, 0)
+  return `<a class="tile" href="#f=${f.id}" style="--hue:${hueHex(f.hue)}">
+    <div class="th"><span class="dot"></span><h3>${esc(fname(f))}</h3><span class="ct">${count}</span></div>
+    <div class="desc">${esc(f.desc)}</div>
+    ${lead ? `<div class="lead"><div class="k">${isEn() ? "Featured" : "대표 노트"}</div><div class="t">${esc(pt(lead))}</div><div class="s">${esc(ps(lead))}</div></div>` : ""}
+    <div class="chips">${f.subs.map((s) => `<span class="subchip">${esc(sname(s))}</span>`).join("")}</div>
+  </a>`
+}
+function homeTiles() {
+  const groups = folderGroups()
+  if (!groups) return `<div class="tiles">${FOLDERS.map(tileHtml).join("")}</div>`
+  return groups.map((g) => {
+    const count = g.folders.reduce((a, f) => a + f.subs.reduce((b, s) => b + s.posts.length, 0), 0)
+    return `<section class="tile-group">
+      <div class="tile-group-head" style="--hue:${g.color}"><span class="dot"></span><h2>${esc(isEn() ? g.en : g.label)}</h2><span class="ct">${count}</span></div>
+      <div class="tiles">${g.folders.map(tileHtml).join("")}</div>
+    </section>`
+  }).join("")
 }
 
 function viewFolder(id) {

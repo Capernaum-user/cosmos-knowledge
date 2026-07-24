@@ -55,6 +55,140 @@ export function createGalaxy(canvas, opts = {}) {
     spriteCache.set(color, s); return s;
   }
 
+  // ---- photographic helpers --------------------------------------------
+  // tint('#RRGGBB', f, a): f<1 darken, f>1 lighten toward white; a = alpha
+  function tint(hex, f, a) {
+    const [r, g, b] = hexToRgb(hex);
+    const m = (v) => Math.max(0, Math.min(255, Math.round(f <= 1 ? v * f : v + (255 - v) * (f - 1))));
+    return a == null ? `rgb(${m(r)},${m(g)},${m(b)})` : `rgba(${m(r)},${m(g)},${m(b)},${a})`;
+  }
+  let spikeSpr = null;
+  function spikeSprite() {                      // 4-blade diffraction cross (camera look)
+    if (spikeSpr) return spikeSpr;
+    const S = 128, s = document.createElement('canvas'); s.width = s.height = S;
+    const c = s.getContext('2d'), m = S / 2;
+    for (let k = 0; k < 2; k++) {
+      c.save(); c.translate(m, m); c.rotate(k * Math.PI / 2);
+      const g = c.createLinearGradient(-m, 0, m, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,0.85)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+      c.fillStyle = g; c.fillRect(-m, -1.1, S, 2.2);
+      c.restore();
+    }
+    spikeSpr = s; return s;
+  }
+  let grainPat = null, vign = null;
+  function makeGrain() {                        // static film-grain tile (drawn drifting)
+    const S = 160, g = document.createElement('canvas'); g.width = g.height = S;
+    const gc = g.getContext('2d');
+    for (let i = 0; i < 2600; i++) {
+      gc.fillStyle = `rgba(${Math.random() < 0.5 ? '255,255,255' : '0,0,0'},${(Math.random() * 0.5).toFixed(2)})`;
+      gc.fillRect(Math.random() * S, Math.random() * S, 1, 1);
+    }
+    try { return ctx.createPattern(g, 'repeat'); } catch (e) { return null; }
+  }
+
+  // ---- planets: pre-rendered photoreal spheres --------------------------
+  const PLANETS = [];
+  function drawRing(c, cx2, cy2, r, tiltA, farHalf, hue, dark) {
+    c.save(); c.translate(cx2, cy2); c.rotate(tiltA);
+    c.beginPath();
+    if (farHalf) c.rect(-r * 3, -r * 3, r * 6, r * 3); else c.rect(-r * 3, 0, r * 6, r * 3);
+    c.clip();
+    const bands = [[1.35, 1.62, dark ? 0.26 : 0.20], [1.66, 1.98, dark ? 0.42 : 0.30], [2.02, 2.14, dark ? 0.20 : 0.14]];
+    for (const [a, b, al] of bands) {
+      c.beginPath();
+      c.ellipse(0, 0, r * b, r * b * 0.30, 0, 0, 6.2832);
+      c.ellipse(0, 0, r * a, r * a * 0.30, 0, 0, 6.2832, true);
+      c.fillStyle = tint(hue, 1.25, al); c.fill('evenodd');
+    }
+    c.restore();
+  }
+  function renderPlanet(def, lightAngle) {
+    const d = def.d, r = d / 2, pad = def.ring ? d * 1.15 : d * 0.35;
+    const S = Math.ceil(d + pad * 2), cx2 = S / 2, cy2 = S / 2;
+    const pc = document.createElement('canvas'); pc.width = pc.height = S;
+    const c = pc.getContext('2d');
+    const lx = Math.cos(lightAngle), ly = Math.sin(lightAngle);
+    const dark = theme === 'dark';
+    const ringTilt = -0.42;
+    if (def.ring) drawRing(c, cx2, cy2, r, ringTilt, true, def.hue, dark);
+    // ---- body (clipped sphere) ----
+    c.save();
+    c.beginPath(); c.arc(cx2, cy2, r, 0, 6.2832); c.clip();
+    let g = c.createRadialGradient(cx2 + lx * r * 0.55, cy2 + ly * r * 0.55, r * 0.1, cx2, cy2, r * 1.35);
+    g.addColorStop(0, tint(def.hue, 1.42)); g.addColorStop(0.45, def.hue); g.addColorStop(1, tint(def.hue, 0.26));
+    c.fillStyle = g; c.fillRect(0, 0, S, S);
+    // surface texture (baked once — cheap at runtime)
+    c.save(); c.translate(cx2, cy2); c.rotate(def.kind === 'gas' ? 0.16 : 0);
+    if (def.kind === 'gas') {
+      c.filter = 'blur(1.6px)';
+      for (let i = 0; i < 16; i++) {
+        const y = -r + (i / 15) * 2 * r + rand(-2, 2), h = rand(3, Math.max(4, r * 0.16));
+        c.fillStyle = `rgba(${i % 2 ? '255,240,215' : '70,45,25'},${rand(0.05, 0.16).toFixed(3)})`;
+        c.fillRect(-r, y, 2 * r, h);
+      }
+    } else if (def.kind === 'ice') {
+      c.filter = 'blur(2px)';
+      for (let i = 0; i < 8; i++) {
+        c.fillStyle = `rgba(255,255,255,${rand(0.05, 0.13).toFixed(3)})`;
+        c.beginPath(); c.ellipse(rand(-r, r) * 0.7, rand(-r, r) * 0.7, rand(r * 0.2, r * 0.5), rand(r * 0.08, r * 0.2), rand(0, 3.14), 0, 6.2832); c.fill();
+      }
+      c.fillStyle = 'rgba(255,255,255,0.30)';
+      c.beginPath(); c.ellipse(0, -r * 0.86, r * 0.55, r * 0.20, 0, 0, 6.2832); c.fill();
+      c.beginPath(); c.ellipse(0, r * 0.88, r * 0.50, r * 0.18, 0, 0, 6.2832); c.fill();
+    } else {
+      c.filter = 'blur(0.8px)';
+      for (let i = 0; i < 46; i++) {
+        c.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,235,210'},${rand(0.04, 0.12).toFixed(3)})`;
+        c.beginPath(); c.arc(rand(-r, r) * 0.85, rand(-r, r) * 0.85, rand(r * 0.03, r * 0.16), 0, 6.2832); c.fill();
+      }
+    }
+    c.restore();
+    // limb darkening (photographic sphere falloff)
+    g = c.createRadialGradient(cx2, cy2, r * 0.55, cx2, cy2, r);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.82, 'rgba(0,0,0,0.10)'); g.addColorStop(1, 'rgba(0,0,0,0.52)');
+    c.fillStyle = g; c.fillRect(0, 0, S, S);
+    // terminator — night side away from the sun
+    g = c.createRadialGradient(cx2 - lx * r * 1.6, cy2 - ly * r * 1.6, r * 0.9, cx2 - lx * r * 1.6, cy2 - ly * r * 1.6, r * 2.75);
+    g.addColorStop(0, `rgba(4,6,14,${dark ? 0.88 : 0.50})`); g.addColorStop(1, 'rgba(4,6,14,0)');
+    c.fillStyle = g; c.fillRect(0, 0, S, S);
+    // lit-side sheen
+    g = c.createRadialGradient(cx2 + lx * r * 0.9, cy2 + ly * r * 0.9, 0, cx2 + lx * r * 0.9, cy2 + ly * r * 0.9, r * 0.9);
+    g.addColorStop(0, 'rgba(255,250,235,0.30)'); g.addColorStop(1, 'rgba(255,250,235,0)');
+    c.fillStyle = g; c.fillRect(0, 0, S, S);
+    c.restore();
+    // thin atmosphere rim
+    g = c.createRadialGradient(cx2, cy2, r * 0.92, cx2, cy2, r * 1.16);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.55, tint(def.hue, 1.55, dark ? 0.34 : 0.22));
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = g; c.fillRect(0, 0, S, S);
+    if (def.ring) drawRing(c, cx2, cy2, r, ringTilt, false, def.hue, dark);
+    if (def.blur) {                              // baked depth-of-field
+      const fc = document.createElement('canvas'); fc.width = fc.height = S;
+      const f2 = fc.getContext('2d'); f2.filter = `blur(${def.blur}px)`; f2.drawImage(pc, 0, 0);
+      return fc;
+    }
+    return pc;
+  }
+  function buildPlanets() {
+    PLANETS.length = 0;
+    const R = Math.min(W, H), dark = theme === 'dark';
+    const defs = [
+      { nx: 0.15, ny: 0.76, d: R * 0.17,  kind: 'gas',  hue: dark ? '#C9A275' : '#B8905F', ring: true,  blur: 0,   depth: 0.9,  alpha: dark ? 0.95 : 0.80 },
+      { nx: 0.88, ny: 0.16, d: R * 0.085, kind: 'ice',  hue: dark ? '#8FB3D6' : '#7FA3C6', ring: false, blur: 0.8, depth: 0.55, alpha: dark ? 0.85 : 0.70 },
+      { nx: 0.33, ny: 0.12, d: R * 0.048, kind: 'rock', hue: dark ? '#B08F76' : '#A08068', ring: false, blur: 1.4, depth: 0.35, alpha: dark ? 0.70 : 0.55 },
+    ];
+    for (const def of defs) {
+      const la = Math.atan2(H * focal.y - def.ny * H, W * focal.x - def.nx * W);  // lit toward the sun
+      PLANETS.push({ ...def, sprite: renderPlanet(def, la) });
+    }
+    // theme-aware vignette (rebuilt with planets)
+    vign = ctx.createRadialGradient(W * 0.5, H * 0.42, Math.min(W, H) * 0.45, W * 0.5, H * 0.5, Math.max(W, H) * 0.78);
+    vign.addColorStop(0, 'rgba(5,7,14,0)');
+    vign.addColorStop(1, theme === 'dark' ? 'rgba(3,4,9,0.30)' : 'rgba(30,38,60,0.10)');
+  }
+
   // ---- field generation -------------------------------------------------
   const DISK = [], FIELD = [];
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -77,12 +211,14 @@ export function createGalaxy(canvas, opts = {}) {
         r, theta, omega, arrName,
         ci: Math.floor(Math.random() * PAL[theme][arrName].length),
         size: rand(0.7, 2.3) * (0.65 + 0.7 * (1 - r)),
-        tw: Math.random() * 6.28, tws: rand(0.5, 1.9), br: rand(0.55, 1)
+        tw: Math.random() * 6.28, tws: rand(0.5, 1.9), br: rand(0.55, 1),
+        spike: Math.random() < 0.02                    // rare bright stars get lens flares
       });
     }
     const fn = Math.max(120, Math.min(320, Math.floor(area / 7000)));
     for (let i = 0; i < fn; i++)
       FIELD.push({ x: Math.random(), y: Math.random(), size: rand(0.4, 1.5), tw: Math.random() * 6.28, tws: rand(0.4, 1.3), depth: rand(0.2, 0.85) });
+    buildPlanets();
   }
 
   function resize() {
@@ -203,6 +339,18 @@ export function createGalaxy(canvas, opts = {}) {
       else dot(x, y, s.size * 0.9, PAL.light.field, 0.42 * tw * s.depth * intensity);
     }
 
+    // planets — solid photographic objects (not additive glow)
+    ctx.globalCompositeOperation = 'source-over';
+    for (let i = 0; i < PLANETS.length; i++) {
+      const p = PLANETS[i], spr = p.sprite;
+      const x = p.nx * W + px * 18 * p.depth + (reduced ? 0 : Math.sin(t * 0.03 + i * 2.1) * 5);
+      const y = p.ny * H + py * 18 * p.depth + (reduced ? 0 : Math.cos(t * 0.025 + i) * 4);
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.alpha * intensity));
+      ctx.drawImage(spr, x - spr.width / 2, y - spr.height / 2);
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = dark ? 'lighter' : 'source-over';
+
     // disk stars — split by depth so half pass behind the sun
     const back = [], front = [];
     for (const st of DISK) {
@@ -217,21 +365,37 @@ export function createGalaxy(canvas, opts = {}) {
       if (dark) {
         const rad = st.size * (1.7 + 1.3 * (z > 0 ? 1 : 0.5)) * 2.0;
         const a = st.br * tw * depthB * intensity * 0.95;
-        (z < 0 ? back : front).push([col, x, y, rad, a, true]);
+        (z < 0 ? back : front).push([col, x, y, rad, a, true, st.spike]);
       } else {
         const rad = st.size * (0.8 + 0.5 * (z > 0 ? 1 : 0.4));
         const a = st.br * tw * depthB * intensity * 0.62;
-        (z < 0 ? back : front).push([col, x, y, rad, a, false]);
+        (z < 0 ? back : front).push([col, x, y, rad, a, false, false]);
       }
     }
-    const paint = d => d[5] ? star(sprite(d[0]), d[1], d[2], d[3], d[4]) : dot(d[1], d[2], d[3], d[0], d[4]);
+    const paint = d => {
+      d[5] ? star(sprite(d[0]), d[1], d[2], d[3], d[4]) : dot(d[1], d[2], d[3], d[0], d[4]);
+      if (d[6] && d[3] > 2.2) star(spikeSprite(), d[1], d[2], d[3] * 3.4, d[4] * 0.5);  // diffraction cross
+    };
     for (const d of back) paint(d);
     if (dark) drawSun(cx + px * 12, cy + py * 12, sunR, t);
     else drawSunLight(cx + px * 12, cy + py * 12, sunR, t);
     for (const d of front) paint(d);
 
+    // ---- photographic finish: drifting film grain + vignette ------------
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
+    if (!grainPat) grainPat = makeGrain();
+    if (grainPat) {
+      ctx.save();
+      ctx.globalAlpha = dark ? 0.05 : 0.03;
+      const gx = reduced ? 0 : (t * 13) % 160, gy = reduced ? 0 : (t * 7) % 160;
+      ctx.translate(-gx, -gy);
+      ctx.fillStyle = grainPat; ctx.fillRect(0, 0, W + 160, H + 160);
+      ctx.restore();
+    }
+    if (vign) { ctx.globalAlpha = 1; ctx.fillStyle = vign; ctx.fillRect(0, 0, W, H); }
+
+    ctx.globalAlpha = 1;
     if (!reduced && !opts.manual) raf = requestAnimationFrame(frame);
     } catch (e) { console.error('GALAXY frame error:', e && e.message, e && e.stack); }
   }
@@ -253,7 +417,7 @@ export function createGalaxy(canvas, opts = {}) {
   return {
     setTheme(next) { theme = next; spriteCache.clear(); build(); frame(performance.now()); },
     setReduced(v) { reduced = v; running = true; frame(performance.now()); },
-    setFocal(f) { focal = f; frame(performance.now()); },
+    setFocal(f) { focal = f; buildPlanets(); frame(performance.now()); },
     setIntensity(v) { intensity = v; frame(performance.now()); },
     redraw() { frame(performance.now()); },
     step(n) { frame(n == null ? performance.now() : n); },
