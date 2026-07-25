@@ -1,5 +1,8 @@
 # 🌌 Cosmos Knowledge
 
+> ℹ️ 이 저장소는 **배포 산출물**입니다. 원본 콘텐츠와 빌드 파이프라인(관리자 서버·야간 생성기 포함)은
+> 로컬 프라이빗 저장소에서 관리되며, 공개 빌드만 이곳으로 발행됩니다.
+
 **권태향(TaeHyang Kwon) — AI 엔지니어 포트폴리오 + 개인 지식정원**
 
 > **라이브: https://capernaum-user.github.io/cosmos-knowledge/**
@@ -29,9 +32,6 @@ garden-data.js ──▶ SPA (app.js · galaxy-field.js)
         ▼
 https://capernaum-user.github.io/cosmos-knowledge/
 ```
-
-> ℹ️ 이 저장소는 **배포 산출물**입니다. 원본 콘텐츠와 빌드 파이프라인(관리자 서버·야간 생성기 포함)은
-> 로컬 프라이빗 저장소에서 관리되며, 공개 빌드만 이곳으로 발행됩니다.
 
 ## 만든 사람
 
